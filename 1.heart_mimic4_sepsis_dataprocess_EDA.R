@@ -4755,6 +4755,7 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
       # --- 3. 线性坐标图 ---
       p1_linear <- ggplot(plot_df, aes(x = time_aligned, y = valuenum, color = Group, fill = Group)) +
         geom_point(aes(shape = Phase), alpha = 0.2, size = 0.6) + # 监护数据点多，降低alpha和size
+        geom_line(aes(aes(group = hadm_id ), alpha = 0.2, size = 0.6)) +
         geom_smooth(aes(group = LineGroup), method = "gam", size = 1, alpha = 0.3) + # 使用 gam 拟合大数据
         geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
         scale_color_manual(values = group_colors) +
@@ -4774,6 +4775,7 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
       p1_log <- ggplot(plot_df, aes(x = time_aligned, y = valuenum, color = Group, fill = Group)) +
         geom_point(aes(shape = Phase), alpha = 0.2, size = 0.6) + 
         geom_smooth(aes(group = LineGroup), method = "gam", size = 1, alpha = 0.3) + 
+        geom_line(aes(aes(group = hadm_id ), alpha = 0.2, size = 0.6))+
         geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
         scale_y_log10() + 
         scale_color_manual(values = group_colors) +
@@ -4870,6 +4872,7 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
       p1_linear <- ggplot(plot_df, aes(x = time_aligned, y = valuenum, color = Group, fill = Group)) +
         geom_point(aes(shape = Phase), alpha = 0.2, size = 0.6) + # 降低 alpha 处理海量点
         geom_smooth(aes(group = LineGroup), method = "gam", size = 1, alpha = 0.3) + 
+        geom_line(aes(aes(group = hadm_id ), alpha = 0.2, size = 0.6))+
         geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
         scale_color_manual(values = group_colors) +
         scale_fill_manual(values = group_colors) +
@@ -4888,6 +4891,7 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
       p1_log <- ggplot(plot_df, aes(x = time_aligned, y = valuenum, color = Group, fill = Group)) +
         geom_point(aes(shape = Phase), alpha = 0.2, size = 0.6) + 
         geom_smooth(aes(group = LineGroup), method = "gam", size = 1, alpha = 0.3) + 
+        geom_line(aes(aes(group = hadm_id ), alpha = 0.2, size = 0.6))+
         geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
         scale_y_log10() + 
         scale_color_manual(values = group_colors) +
@@ -4982,6 +4986,7 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
       p1_linear <- ggplot(plot_df, aes(x = time_aligned, y = valuenum, color = Group, fill = Group)) +
         geom_point(aes(shape = Phase), alpha = 0.2, size = 0.6) + # 极低透明度
         geom_smooth(aes(group = LineGroup), method = "gam", size = 1, alpha = 0.3) + 
+        geom_line(aes(aes(group = hadm_id ), alpha = 0.2, size = 0.6))+
         geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
         scale_color_manual(values = group_colors) +
         scale_fill_manual(values = group_colors) +
@@ -5000,6 +5005,7 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
       p1_log <- ggplot(plot_df, aes(x = time_aligned, y = valuenum, color = Group, fill = Group)) +
         geom_point(aes(shape = Phase), alpha = 0.2, size = 0.6) + 
         geom_smooth(aes(group = LineGroup), method = "gam", size = 1, alpha = 0.3) + 
+        geom_line(aes(aes(group = hadm_id ), alpha = 0.2, size = 0.6))+
         geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
         scale_y_log10() + 
         scale_color_manual(values = group_colors) +

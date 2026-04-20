@@ -3121,6 +3121,9 @@ print(converted_labels$label)
 # [7] "Lactate Dehydrogenase (LD)"      "Troponin T"  
 
 # 3. 实验室指标统计表 #----------------------------------------------------
+setwd(file.path(Output_derived_data, "data_filtered"))
+df_lab_log <- readRDS("icu_filtered_mimic4_Sepsislog.rds") 
+
 length(unique(df_lab_log$label))
 unique(df_lab_log$label)
 length(unique(df_lab_log$hadm_id))
@@ -3797,6 +3800,9 @@ first_icu_chartevent3 <- first_icu_chartevent2 %>% filter(label %in% c("GCS - Mo
 }
 
 # 休克组和非休克组实验室指标对比 #----------------------------------------------
+setwd(file.path(Output_derived_data, "data_filtered"))
+df_lab_log <- readRDS("icu_filtered_mimic4_Sepsislog.rds") 
+
 unique(df_lab_log$label)
 target_labelx1 <- c(
   # --- 1. 心肌损伤与心脏功能指标 ---
@@ -4516,8 +4522,12 @@ label_groups <- list(
   "电解质与矿物质指标"     = target_labelx5,
   "炎症、代谢及其他指标"   = target_labelx6
 )
-base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_PreShock"
-
+base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_PreShock_13days"
+format_p <- function(p) {
+  if (is.na(p)) return("P = N/A")
+  if (p < 0.001) return("P < 0.001")
+  return(paste0("P = ", round(p, 3)))
+}
 for (group_name in names(label_groups)) {
   
   output_dir <- file.path(base_path, group_name)
@@ -4539,7 +4549,7 @@ for (group_name in names(label_groups)) {
           (shock == 0 & charttime_rel_icu >= 0)
       ) %>% 
       # # 限制观察时间范围，比如入院后前 7 天（防止长住院病人的尾部噪音）
-      # filter(charttime_rel_icu <= 7) %>%
+      filter(charttime_rel_icu <= 13) %>%
       mutate(Group = factor(ifelse(shock == 1, "Future Shock", "Non-Shock"),
                             levels = c("Non-Shock", "Future Shock")))
     
@@ -4605,86 +4615,200 @@ for (group_name in names(label_groups)) {
 message("所有休克前对比图绘制完毕。")
 
 # 休克发生后两组患者的实验室指标对比 #------------------------------------------
-label_groups <- list(
-  "心肌损伤与心脏功能指标" = target_labelx1,
-  "组织灌注与酸碱平衡指标" = target_labelx2,
-  "肝肾器官功能指标"       = target_labelx3,
-  "血液学与凝血功能指标"   = target_labelx4,
-  "电解质与矿物质指标"     = target_labelx5,
-  "炎症、代谢及其他指标"   = target_labelx6
-)
-
-# 建议存放在专门的 "Pre-Shock_Comparison" 文件夹
-base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_post_Shock"
-
-for (group_name in names(label_groups)) {
+{
+  # 辅助函数：格式化P值
+  format_p <- function(p) {
+    if (is.null(p) || is.na(p)) return("N/A")
+    if (p < 0.001) return("< 0.001")
+    return(as.character(round(p, 3)))
+  }
   
-  output_dir <- file.path(base_path, group_name)
-  if (!dir.exists(output_dir)) { dir.create(output_dir, recursive = TRUE) }
+  label_groups <- list(
+    "心肌损伤与心脏功能指标" = target_labelx1,
+    "组织灌注与酸碱平衡指标" = target_labelx2,
+    "肝肾器官功能指标"       = target_labelx3,
+    "血液学与凝血功能指标"   = target_labelx4,
+    "电解质与矿物质指标"     = target_labelx5,
+    "炎症、代谢及其他指标"   = target_labelx6
+  )
   
-  target_list <- label_groups[[group_name]]
+  # 建议存放在专门的 "Pre-Shock_Comparison" 文件夹
+  base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_post_Shock"
   
-  for (target_biomarker in target_list) {
+  for (group_name in names(label_groups)) {
+    output_dir <- file.path(base_path, group_name)
+    if (!dir.exists(output_dir)) { dir.create(output_dir, recursive = TRUE) }
     
-    message("正在绘制休克后对比图: ", target_biomarker)
+    target_list <- label_groups[[group_name]]
     
-    # --- 核心逻辑：剔除休克后的测量点 ---
-    plot_df <- df_lab_log %>%
-      filter(label == target_biomarker & !is.na(valuenum)) %>%
-      filter(
-        # 条件1：如果是休克组，只取入院后、发病后的点
-        (shock == 1 & charttime_rel_icu >= 0 & charttime_rel_icu > shock_onset_rel_icu) |
-          # 条件2：如果是非休克组，只取入院后的点
-          (shock == 0 & charttime_rel_icu >= 0)
-      ) %>% 
-      # # 限制观察时间范围，比如入院后前 7 天（防止长住院病人的尾部噪音）
-      # filter(charttime_rel_icu <= 7) %>%
-      mutate(Group = factor(ifelse(shock == 1, "Future Shock", "Non-Shock"),
-                            levels = c("Non-Shock", "Future Shock")))
-    
-    # 健壮性检查
-    if (nrow(plot_df) < 10 | length(unique(plot_df$shock)) < 2) {
-      message("跳过 ", target_biomarker, "：有效对比数据太少")
-      next
+    for (target_biomarker in target_list) {
+      message("正在处理: ", target_biomarker)
+      
+      # 1. 数据准备
+      plot_df <- df_lab_log %>%
+        filter(label == target_biomarker & !is.na(valuenum)) %>%
+        filter(
+          (shock == 1 & charttime_rel_icu >= 0 & charttime_rel_icu < shock_onset_rel_icu) | # 注意：Pre-Shock应该是小于onset
+            (shock == 0 & charttime_rel_icu >= 0)
+        ) %>% 
+        mutate(Group = factor(ifelse(shock == 1, "Future Shock", "Non-Shock"),
+                              levels = c("Non-Shock", "Future Shock")))
+      
+      if (nrow(plot_df) < 20 || length(unique(plot_df$Group)) < 2) {
+        message("跳过 ", target_biomarker, "：数据量不足")
+        next
+      }
+      
+      # --- 2. 统计建模 (移入循环内部) ---
+      p_linear_val <- "N/A"
+      p_log_val <- "N/A"
+      
+      # 线性模型：加入交互项 Group * charttime_rel_icu
+      try({
+        model_linear <- lmer(valuenum ~ Group * charttime_rel_icu + (1 | subject_id), data = plot_df)
+        coef_summary <- summary(model_linear)$coefficients
+        # 提取 Group 的主效应 P 值 (整体差异)
+        p_linear_val <- format_p(coef_summary["GroupFuture Shock", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # 对数模型：处理偏态数据（如肌钙蛋白、乳酸）
+      try({
+        model_log <- lmer(log10(valuenum + 0.001) ~ Group * charttime_rel_icu + (1 | subject_id), data = plot_df)
+        coef_log_summary <- summary(model_log)$coefficients
+        p_log_val <- format_p(coef_log_summary["GroupFuture Shock", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # --- 3. 绘图 ---
+      # 线性图
+      p_linear_plot <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.1, size = 0.5) + 
+        geom_smooth(method = "loess", size = 1.2) + 
+        scale_color_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+        scale_fill_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+        labs(x = "Days", y = target_biomarker, 
+             title = paste0("Linear (P: ", p_linear_val, ")")) +
+        theme_cor
+      
+      # 对数图
+      p_log_plot <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.1, size = 0.5) + 
+        geom_smooth(method = "loess", size = 1.2) + 
+        scale_y_log10() +
+        scale_color_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+        scale_fill_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+        labs(x = "Days", y = paste0("Log10 ", target_biomarker),
+             title = paste0("Log-scale (P: ", p_log_val, ")")) +
+        theme_cor
+      
+      # 合并保存
+      combined_plot <- (p_linear_plot | p_log_plot) + plot_layout(guides = 'collect') & theme(legend.position = "bottom")
+      
+      safe_name <- gsub("[^[:alnum:]]", "_", target_biomarker)
+      ggsave(file.path(output_dir, paste0(safe_name, "_PreShock.png")), combined_plot, width = 12, height = 6)
     }
-    
-    
-    
-    p_linear <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
-      geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
-      geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
-      scale_color_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
-      scale_fill_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
-      labs(
-        x = "Days from Admission",
-        y = paste0(target_biomarker, " (", unit, ")")
-      ) +
-      theme_cor + ggtitle("Linear Scale (Pre-Shock Only)")
-    
-    
-    p_log <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
-      geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
-      geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
-      scale_y_log10() +
-      scale_color_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
-      scale_fill_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
-      labs(x = "Days from Admission", y = paste0("Log10[ ",target_biomarker, " (", unit, ") ]")) +
-      theme_cor + ggtitle("Log10 Scale (Pre-Shock Only)")
-    
-    # --- 4. 合并与保存 ---
-    combined_plot <- (p_linear | p_log) + 
-      plot_layout(guides = 'collect') & 
-      theme(legend.position = "bottom")
-    
-    safe_name <- gsub("[^[:alnum:]]", "_", target_biomarker)
-    file_path <- file.path(output_dir, paste0(safe_name, "_PreShock_Comparison.png"))
-    ggsave(file_path, plot = combined_plot, width = 12, height = 6, dpi = 300)
   }
 }
-
-message("所有休克后对比图绘制完毕。")
-
-
+# 休克发生后休克患者死亡存活组的实验室指标对比 #------------------------------------------
+# 休克发生后：对比休克患者中的 死亡组 (4) vs 存活组 (3)
+{
+  # 1. 辅助函数：格式化P值
+  format_p <- function(p) {
+    if (is.null(p) || is.na(p)) return("N/A")
+    if (p < 0.001) return("< 0.001")
+    return(as.character(round(p, 3)))
+  }
+  
+  label_groups <- list(
+    "心肌损伤与心脏功能指标" = target_labelx1,
+    "组织灌注与酸碱平衡指标" = target_labelx2,
+    "肝肾器官功能指标"       = target_labelx3,
+    "血液学与凝血功能指标"   = target_labelx4,
+    "电解质与矿物质指标"     = target_labelx5,
+    "炎症、代谢及其他指标"   = target_labelx6
+  )
+  
+  # 设置输出路径
+  base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_post_Shock_survival_death"
+  
+  for (group_name in names(label_groups)) {
+    output_dir <- file.path(base_path, group_name)
+    if (!dir.exists(output_dir)) { dir.create(output_dir, recursive = TRUE) }
+    
+    target_list <- label_groups[[group_name]]
+    
+    for (target_biomarker in target_list) {
+      message("正在处理: ", target_biomarker)
+      
+      # --- 2. 数据准备 ---
+      plot_df <- df_lab_log %>%
+        filter(label == target_biomarker & !is.na(valuenum)) %>%
+        filter(shock == 1) %>%                      # 仅保留休克患者
+        filter(charttime_rel_icu >= shock_onset_rel_icu) %>% # 仅保留休克发生后的数据点
+        # 时间对齐：以休克发生为 0 点
+        mutate(Days_Post_Shock = charttime_rel_icu - shock_onset_rel_icu) %>%
+        # 分组逻辑修改：4为死亡，3为存活
+        mutate(Group = factor(ifelse(endpoint_state == 4, "Deceased", "Survivor"),
+                              levels = c("Survivor", "Deceased")))
+      
+      # 健壮性检查
+      if (nrow(plot_df) < 20 || length(unique(plot_df$Group)) < 2) {
+        message("跳过 ", target_biomarker, "：数据不足以对比存活与死亡")
+        next
+      }
+      
+      # --- 3. 统计建模 ---
+      p_linear_val <- "N/A"
+      p_log_val <- "N/A"
+      
+      # 线性混合模型：检验两组之间是否存在显著性差异
+      try({
+        model_linear <- lmer(valuenum ~ Group * Days_Post_Shock + (1 | subject_id), data = plot_df)
+        coef_summary <- summary(model_linear)$coefficients
+        # 提取 GroupDeceased 的 P 值
+        p_linear_val <- format_p(coef_summary["GroupDeceased", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # 对数混合模型
+      try({
+        model_log <- lmer(log10(valuenum + 0.001) ~ Group * Days_Post_Shock + (1 | subject_id), data = plot_df)
+        coef_log_summary <- summary(model_log)$coefficients
+        p_log_val <- format_p(coef_log_summary["GroupDeceased", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # --- 4. 绘图 ---
+      # 存活组 Survivor(3) 用绿色，死亡组 Deceased(4) 用红色
+      color_values <- c("Deceased" = "#E41A1C", "Survivor" = "#377EB8")
+      
+      p_linear_plot <- ggplot(plot_df, aes(x = Days_Post_Shock, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+        geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+        scale_color_manual(values = color_values) +
+        scale_fill_manual(values = color_values) +
+        labs(x = "Days post shock onset", y = target_biomarker, 
+             title = paste0("Linear (Group P: ", p_linear_val, ")")) +
+        theme_cor
+      
+      p_log_plot <- ggplot(plot_df, aes(x = Days_Post_Shock, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+        geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+        scale_y_log10() +
+        scale_color_manual(values = color_values) +
+        scale_fill_manual(values = color_values) +
+        labs(x = "Days post shock onset", y = paste0("Log10 ", target_biomarker),
+             title = paste0("Log-scale (Group P: ", p_log_val, ")")) +
+        theme_cor
+      
+      # 合并保存
+      combined_plot <- (p_linear_plot | p_log_plot) + 
+        plot_layout(guides = 'collect') & 
+        theme(legend.position = "bottom")
+      
+      safe_name <- gsub("[^[:alnum:]]", "_", target_biomarker)
+      ggsave(file.path(output_dir, paste0(safe_name, "_PostShock_Survivor_vs_Death.png")), 
+             combined_plot, width = 12, height = 6, dpi = 300)
+    }
+  }
+}
 # 4. 床边监护ct图 #-------------------------------------------------------------
 # 对齐休克为0时刻 心源性休克组 vs 非心源性休克床边监护指标ct图#---------------------------------
 # 1. 提取 hadm_id 与 Cardiogenic_shock 的对应关系
@@ -5060,6 +5184,8 @@ first_icu_chartevent3 <- first_icu_chartevent3 %>% mutate(hadm_id = as.numeric(h
 # 6.实验室指标间相关性图 #--------------------------------------------------------------
 # 6.1 住院期间平均值计算相关性 #--------------------------------------------------------------
 # 第一次icu病程数据 #---------------------------------------------------
+setwd(file.path(Output_derived_data,"data_filtered"))
+df_lab_log <- readRDS("icu_filtered_mimic4_Sepsislog.rds")
 folder_name <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\correlation\\548第一次住icu的病程记录\\住院期间平均值"
 if (!dir.exists(folder_name)) { dir.create(folder_name, recursive = TRUE) }
 
@@ -5156,52 +5282,80 @@ for (c in 1:length(target_labels)) {
 
 # 热图
 {
-  library(corrplot)
- 
-  # 1. 准备数据（去掉非数值列）
-  cor_data <- lab_wider %>% select(-hadm_id)
-  
-  # 2. 计算相关系数 (R)
-  M <- cor(cor_data, method = "pearson", use = "pairwise.complete.obs")
-  
-  # 3. 计算 P 值矩阵 (用于画星号)
-  res_p <- cor.mtest(cor_data, conf.level = 0.95)$p
-  
-  # 3. 绘图
-  # 定义颜色：红-白-蓝 调色板
-  col_palette <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
-  
-  # 设置保存图片
-  png(file.path(folder_name, "Lab_Corr_Standard.png"), width = 1200, height = 1200, res = 150)
-  
-  # 绘图
-  corrplot(M, 
-           method = "color",          # 方块着色
-           type = "upper",            # 只画上三角
-           col = col_palette(200),    # 使用自定义颜色
-           
-           # --- 标签设置 (关键) ---
-           tl.pos = "lt",             # 标签放在左边(Left)和顶端(Top)
-           tl.col = "black",          # 标签颜色
-           tl.srt = 90,               # 顶端标签旋转90度
-           tl.cex = 0.8,              # 标签字体大小
-           
-           # --- 数值与星号设置 ---
-           addCoef.col = "black",     # 相关系数数字颜色
-           number.cex = 0.7,          # 相关系数数字大小
-           p.mat = res_p,             # 传入P值矩阵
-           sig.level = c(0.001, 0.01, 0.05), # 显著性等级
-           insig = "label_sig",       # 显著的显示星号，不显著的只显示数字
-           pch.cex = 0.8,             # 星号大小
-           
-           # --- 其他细节 ---
-           diag = TRUE,               # 显示对角线
-           addgrid.col = "grey80",    # 网格线颜色
-           mar = c(0, 0, 2, 0)        # 留白，防止标签被切断
-  )
-  
-  dev.off()
+  {
+    library(corrplot)
+    library(dplyr)
+    
+    # 1. 准备数据
+    cor_data <- lab_wider %>% select(-hadm_id)
+    M <- cor(cor_data, method = "pearson", use = "pairwise.complete.obs")
+    
+    # 2. 聚类排序
+    ord <- corrMatOrder(M, order = "hclust")
+    M_ord <- M[ord, ord]
+    n <- ncol(M_ord)
+    
+    # 3. 颜色与保存设置
+    col_palette <- colorRampPalette(c("#377EB8", "white", "#E41A1C"))(200)
+    label_color <- "#FF8C00" # 橙色
+    
+    file_path <- file.path(folder_name, "corrplot_Staircase_Final_Fixed.png")
+    # 增加图片宽度到 3200，给左侧留位置
+    png(file_path, width = 3200, height = 3000, res = 300)
+    
+    # 【修正点 1】：加大左边距 (第二个参数) 和顶边距 (第三个参数)
+    # c(bottom, left, top, right)
+    par(mar = c(2, 15, 15, 2)) 
+    
+    # A. 绘制基础热图
+    # 【修正点 2】：使用 xlim 参数！
+    # 默认 x 轴是 0.5 到 n+0.5。我们把它改成 -12 到 n+0.5，
+    # 这样左边就有了一大块可以写字的“画布区域”。
+    corrplot(M_ord, 
+             method = "color", 
+             type = "upper",            
+             col = col_palette,
+             addCoef.col = "black",     
+             number.cex = 0.45,         
+             tl.pos = "n",              
+             diag = TRUE,               
+             outline = "grey90",        
+             cl.pos = "r",
+             xlim = c(-12, n + 0.5)     # 核心：撑开左侧坐标轴
+    )
+    
+    # 【关键】：开启裁剪忽略模式，允许在绘图区外写字
+    par(xpd = TRUE)
+    
+    var_names <- colnames(M_ord)
+    
+    # B. 手动添加顶部标签 (X轴)
+    text(x = 1:n, 
+         y = n + 1.5,                  # 向上偏移一点，防止压线
+         labels = var_names, 
+         srt = 90, 
+         adj = 0, 
+         cex = 0.55, 
+         col = label_color)            
+    
+    # C. 【修正点 3】：手动添加 Y 轴台阶标签
+    for (i in 1:n) {
+      # 这里的 x 坐标现在可以在 -12 到 1 之间自由浮动了
+      # 调大偏移量（如 -0.8），确保文字不会碰到方块
+      text(x = i - 0.8, 
+           y = n - i + 1, 
+           labels = var_names[i], 
+           col = label_color, 
+           adj = 1,                    # 右对齐：文字末尾对齐方块左沿
+           cex = 0.55, 
+           font = 2)
+    }
+    
+    dev.off()
+    cat("✅ 最终版热图已生成。如果左边还缺，请继续调大 xlim 的负值：\n", file_path)
+  }
 }
+ 
 # 住院天数大于2小于40的患者log #---------------------------------------------------
 folder_name <- "D:\\Lab_project\\2026work\\Markfu\\PLOT\\sepsis\\correlation\\住院天数大于2小于40的患者脓毒症相关指标相关性\\住院期间平均值log"
 if (!dir.exists(folder_name)) {
@@ -5282,7 +5436,7 @@ for (c in 1:length(target_labels)) {
       message(paste("跳过:", var_x, "vs", var_y, "(有效数据点太少)"))
       next
     }
-    
+    # “使用线性混合效应模型（LMM）分析指标的组间差异，将‘组别’和‘进入ICU后的相对时间’作为固定效应，将‘患者ID’作为随机截距以修正重复测量数据的内相关性。通过对固定效应 Group 的 $t$ 检验来评估两组间的显著性差异。”
     # 使用 tryCatch 防止因数据问题（如标准差为0）导致报错中断循环
     test_result <- tryCatch({
       cor.test(x_data, y_data, method = "pearson", use = "complete.obs")

@@ -4809,6 +4809,108 @@ message("所有休克前对比图绘制完毕。")
     }
   }
 }
+# 休克发生后休克患者死亡存活组的实验室指标对比30days #------------------------------------------
+# 休克发生后：对比休克患者中的 死亡组 (4) vs 存活组 (3)
+{
+  # 1. 辅助函数：格式化P值
+  format_p <- function(p) {
+    if (is.null(p) || is.na(p)) return("N/A")
+    if (p < 0.001) return("< 0.001")
+    return(as.character(round(p, 3)))
+  }
+  
+  label_groups <- list(
+    "心肌损伤与心脏功能指标" = target_labelx1,
+    "组织灌注与酸碱平衡指标" = target_labelx2,
+    "肝肾器官功能指标"       = target_labelx3,
+    "血液学与凝血功能指标"   = target_labelx4,
+    "电解质与矿物质指标"     = target_labelx5,
+    "炎症、代谢及其他指标"   = target_labelx6
+  )
+  
+  # 设置输出路径
+  base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_post_Shock_survival_death_30days"
+  
+  for (group_name in names(label_groups)) {
+    output_dir <- file.path(base_path, group_name)
+    if (!dir.exists(output_dir)) { dir.create(output_dir, recursive = TRUE) }
+    
+    target_list <- label_groups[[group_name]]
+    
+    for (target_biomarker in target_list) {
+      message("正在处理: ", target_biomarker)
+      
+      # --- 2. 数据准备 ---
+      plot_df <- df_lab_log %>%
+        filter(label == target_biomarker & !is.na(valuenum)) %>%
+        filter(shock == 1) %>%                      # 仅保留休克患者
+        filter(charttime_rel_icu >= shock_onset_rel_icu) %>% # 仅保留休克发生后的数据点
+        # 时间对齐：以休克发生为 0 点
+        mutate(Days_Post_Shock = charttime_rel_icu - shock_onset_rel_icu) %>%
+        # 分组逻辑修改：4为死亡，3为存活
+        mutate(Group = factor(ifelse(endpoint_state == 4, "Deceased", "Survivor"),
+                              levels = c("Survivor", "Deceased"))) %>% 
+        filter(charttime_rel_icu <= 30)
+      
+      # 健壮性检查
+      if (nrow(plot_df) < 20 || length(unique(plot_df$Group)) < 2) {
+        message("跳过 ", target_biomarker, "：数据不足以对比存活与死亡")
+        next
+      }
+      
+      # --- 3. 统计建模 ---
+      p_linear_val <- "N/A"
+      p_log_val <- "N/A"
+      
+      # 线性混合模型：检验两组之间是否存在显著性差异
+      try({
+        model_linear <- lmer(valuenum ~ Group * Days_Post_Shock + (1 | subject_id), data = plot_df)
+        coef_summary <- summary(model_linear)$coefficients
+        # 提取 GroupDeceased 的 P 值
+        p_linear_val <- format_p(coef_summary["GroupDeceased", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # 对数混合模型
+      try({
+        model_log <- lmer(log10(valuenum + 0.001) ~ Group * Days_Post_Shock + (1 | subject_id), data = plot_df)
+        coef_log_summary <- summary(model_log)$coefficients
+        p_log_val <- format_p(coef_log_summary["GroupDeceased", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # --- 4. 绘图 ---
+      # 存活组 Survivor(3) 用绿色，死亡组 Deceased(4) 用红色
+      color_values <- c("Deceased" = "#E41A1C", "Survivor" = "#377EB8")
+      
+      p_linear_plot <- ggplot(plot_df, aes(x = Days_Post_Shock, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+        geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+        scale_color_manual(values = color_values) +
+        scale_fill_manual(values = color_values) +
+        labs(x = "Days post shock onset", y = target_biomarker, 
+             title = paste0("Linear (Group P: ", p_linear_val, ")")) +
+        theme_cor
+      
+      p_log_plot <- ggplot(plot_df, aes(x = Days_Post_Shock, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+        geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+        scale_y_log10() +
+        scale_color_manual(values = color_values) +
+        scale_fill_manual(values = color_values) +
+        labs(x = "Days post shock onset", y = paste0("Log10 ", target_biomarker),
+             title = paste0("Log-scale (Group P: ", p_log_val, ")")) +
+        theme_cor
+      
+      # 合并保存
+      combined_plot <- (p_linear_plot | p_log_plot) + 
+        plot_layout(guides = 'collect') & 
+        theme(legend.position = "bottom")
+      
+      safe_name <- gsub("[^[:alnum:]]", "_", target_biomarker)
+      ggsave(file.path(output_dir, paste0(safe_name, "_PostShock_Survivor_vs_Death.png")), 
+             combined_plot, width = 12, height = 6, dpi = 300)
+    }
+  }
+}
 # 4. 床边监护ct图 #-------------------------------------------------------------
 # 对齐休克为0时刻 心源性休克组 vs 非心源性休克床边监护指标ct图#---------------------------------
 # 1. 提取 hadm_id 与 Cardiogenic_shock 的对应关系
@@ -5198,7 +5300,6 @@ lab_wider <- df_lab_log1 %>%
   group_by(hadm_id, label) %>%
   summarise(avg_value = mean(as.numeric(valuenum) , na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = label, values_from = avg_value)
-
 
 # 设定阈值
 p_threshold <- 0.05      # 显著性水平
@@ -5682,6 +5783,452 @@ for (c in 1:length(target_labels)) {
   }
 }
 
+# 7.实验室指标基线值_人口学信息相关性分析 #-------------------------------
+{
+  # 第一次icu病程数据 #---------------------------------------------------
+  setwd(file.path(Output_derived_data,"data_filtered"))
+  df_lab_log <- readRDS("icu_filtered_mimic4_Sepsislog.rds")
+  folder_name <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\correlation\\548第一次住icu的病程记录\\基线值"
+  if (!dir.exists(folder_name)) { dir.create(folder_name, recursive = TRUE) }
+  
+  unique(df_lab_log$label)
+  colnames(df_lab_log)
+  df_lab_log1 <- df_lab_log %>% mutate(race_group = case_when(
+    grepl("WHITE|PORTUGUESE", race, ignore.case = TRUE) ~ 1,
+    grepl("BLACK", race, ignore.case = TRUE) ~ 2,
+    grepl("ASIAN", race, ignore.case = TRUE) ~ 3,
+    TRUE ~ 4
+  )) %>% 
+  select(hadm_id,gender,age,race_group,charttime_rel_icu,valuenum,label)
+  lab_wider_baseline <- df_lab_log1 %>%
+    group_by(hadm_id, label) %>%
+    arrange(charttime_rel_icu) %>%
+    slice(1) %>%
+    ungroup() %>% 
+    select(-charttime_rel_icu) %>% 
+    pivot_wider(names_from = label, values_from = valuenum)
+  colnames(lab_wider_baseline)
+ 
+  covname <- colnames(lab_wider_baseline[,c("age"                            ,                  
+                                            "Anion Gap"                      ,"Base Excess"                      ,               
+                                            "Calculated Total CO2"           ,"Chloride"                       ,
+                                             "Creatine Kinase (CK)"          , "Creatine Kinase, MB Isoenzyme"  ,
+                                             "Creatinine"                    , "Glucose"                        ,
+                                             "Hematocrit"                    , "Hemoglobin"                     ,
+                                             "INR(PT)"                       , "Lactate"                        ,
+                                             "Lymphocytes"                   , "Magnesium"                      ,
+                                             "Monocytes"                     , "Neutrophils"                    ,
+                                             "PT"                            , "PTT"                            ,
+                                             "Phosphate"                     , "Platelet Count"                 ,
+                                             "Potassium"                     , "RDW"                            ,
+                                             "Red Blood Cells"               , "Sodium"                         ,
+                                             "Troponin T"                    , "Urea Nitrogen"                  ,
+                                             "White Blood Cells"             , "pCO2"                           ,
+                                             "pH"                            , "pO2"                            ,
+                                             "Alanine Aminotransferase (ALT)", "Asparate Aminotransferase (AST)",
+                                             "Bilirubin, Total"              , "Free Calcium"                   ,
+                                             "Lactate Dehydrogenase (LD)"    , "Albumin"   )])
+  
+  catcovname <- colnames(lab_wider_baseline[,c("gender","race_group")]) 
+  cov <- lab_wider_baseline %>%  mutate(across(all_of(covname), as.numeric), across(all_of(catcovname), as.factor))
+
+  # 连续协变量之间是否存在相关性预筛选
+  for (c in 1:length(covname)) {
+    if (c < length(covname)){
+      d <- c+1
+    }else{
+      d <- c
+    }
+    for (e in d:length(covname)) {
+      p3 <- ggplot(data=cov, mapping = aes(x=get((covname[c])),y =get((covname[e]))))+
+        geom_point(color="blue",alpha=0.3,size=1.5)+
+        geom_smooth(color="red",method = "lm",size=0.9)+
+         ggpubr::stat_cor(method = "pearson",color="black",digits = 3)+ #添加相关性系数 根据画图需要选择是否保留
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_blank(),
+              panel.border = element_rect(colour = "black", fill=NA, linewidth =1.2),
+              axis.title = element_text(size = 12,face = "bold"),
+              axis.title.x = element_text(vjust = -0.8),
+              axis.title.y = element_text(vjust = 1.5),
+              axis.text = element_text(size=10,face = "bold",color = "black"),
+              axis.ticks = element_line(color="black",linewidth =1),
+              axis.ticks.length=unit(0.15,"cm"),
+              legend.position = "none") + 
+        xlab(paste(covname[c]))+
+        ylab(paste(covname[e]))
+      setwd(folder_name)
+      png(filename = paste(covname[c],covname[e],"corr.png",sep = "_"),
+          width = 800,height = 800,res = 240)
+      print(p3)
+      dev.off()
+    }
+  }
+  # 分类协变量与连续协变量分析
+  for (j in 1:length(catcovname)) {
+    for (k in 1:length(covname)) {
+      p4 <- ggplot(data=cov,mapping = aes(x=get((catcovname[j])),y =get((covname[k]))))+
+        geom_boxplot()+
+         ggpubr::stat_compare_means(method = "t.test",aes(label=paste0("p=",..p.format..)))+ #添加显著性 按需要删减
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_blank(),
+              panel.border = element_rect(colour = "black", fill=NA, linewidth =1.2),
+              axis.title = element_text(size = 12,face = "bold"),
+              axis.title.x = element_text(vjust = -0.8),
+              axis.title.y = element_text(vjust = 1.5),
+              axis.text = element_text(size=10,face = "bold",color = "black"),
+              axis.ticks = element_line(color="black",linewidth =1),
+              axis.ticks.length=unit(0.15,"cm"),
+              legend.position = "none") + 
+        xlab(paste(catcovname[j]))+
+        ylab(paste(covname[k]))
+      setwd(folder_name)
+      png(filename = paste(catcovname[j],covname[k],"corr.png",sep = "_"),
+          width = 800,height = 800,res = 240)
+      print(p4)
+      dev.off()
+    }
+  }
+  ### 绘制相关性总图
+  ggparis_data <- cov[,c(2:42)] #根据数据集修改
+  ggparis_data$GENDER <- as.factor(ggparis_data$gender) #修改分类协变量的数据格式
+  ggparis_data$ETHNIC <- as.factor(ggparis_data$race_group) #修改分类协变量的数据格式 
+  
+  p5 <- ggpairs(ggparis_data,
+                lower = list(continuous = wrap(lowerFn)),
+                upper = list(continuous = wrap("cor",size = 3,digits = 3),
+                             combo = wrap("box",outlier.size = 0.3,size = 0.3)),
+                columnLabels = colnames(ggparis_data)) + 
+    theme(axis.text = element_text(size = 5),
+          axis.title = element_text(size = 5))
+  setwd(folder_name)
+  png(filename = paste("ggparis_corr.png"),
+      width = 6000,height = 6000,res = 240)
+  print(p5)
+  dev.off()
+}
+
+# 对race_group四个分组的相关性分析
+{
+  library(ggplot2)
+  library(dplyr)
+  library(ggpubr)
+  library(rstatix) 
+  
+  # --- 1. 定义主题与配色 ---
+  mytheme <- theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, linewidth =1.2),
+    axis.line = element_line(color = "black", linewidth = 0.8),
+    axis.title = element_text(face = "bold", size = 12),
+    axis.text = element_text(color = "black", face = "bold"),
+    legend.position = "none"
+  )
+
+  # 确保输出文件夹存在
+  output_path <- file.path(folder_name, "T_Test_Trend_Plots")
+  if(!dir.exists(output_path)) dir.create(output_path, recursive = TRUE)
+  
+  # --- 2. 开始自动化绘图循环 ---
+  for (cont_var in covname) {
+    cat("正在生成 T 检验趋势图: ", cont_var, "\n")
+    
+    # A. 数据清洗：剔除 NA
+    plot_df <- cov %>% 
+      select(race_group, all_of(cont_var)) %>% 
+      filter(!is.na(.data[[cont_var]]), !is.na(race_group))
+    
+    # 样本量太小时跳过
+    if (nrow(plot_df) < 10) next
+    
+    tryCatch({
+      # B. 计算两组间的显著性 (核心修改：t_test)
+      # 自动执行 race_group 内各组之间的两两 T 检验
+      stat_test <- plot_df %>%
+        t_test(as.formula(paste0("`", cont_var, "` ~ race_group"))) %>%
+        add_significance() %>%
+        add_xy_position(x = "race_group") 
+      # %>%
+        # 可选：如果你只想看显著的对比，取消下面这行的注释
+        # filter(p < 0.05) 
+      
+      # C. 绘图
+      p <- ggplot(plot_df, aes(x = race_group, y = .data[[cont_var]])) +
+        # 1. 箱线图上下误差线
+        stat_boxplot(geom = "errorbar", width = 0.2, linewidth = 0.8) +
+        
+        # 2. 箱线图本体
+        geom_boxplot(width = 0.5, outlier.shape = NA, fill = "white", color = "black") +
+        
+        # 3. 抖动散点 (pch=21 为带边框的圆点)
+        geom_jitter(aes(fill = race_group), pch = 21, size = 3, width = 0.2, alpha = 0.7) +
+        
+        # 4. 跨组线性趋势线 (group=1 强行跨类)
+        geom_smooth(method = "lm", formula = y ~ x, 
+                    aes(group = 1), 
+                    color = "black", linetype = "dashed", size = 1, se = TRUE) +
+        
+        # 5. 添加 T 检验显著性标记 (stat_pvalue_manual)
+        stat_pvalue_manual(stat_test, label = "p.adj.signif", tip.length = 0.01, hide.ns = TRUE) +
+        
+        # 6. 添加相关性统计 (R2 和 P)
+        stat_cor(aes(group = 1, label = paste(..rr.label.., ..p.label.., sep = "~`,`~")),
+                 method = "pearson", 
+                 label.x.npc = "left", 
+                 label.y.npc = 1, # 锁定在绘图区顶部
+                 size = 4.5, fontface = "bold") +
+        
+        # 7. 添加回归方程
+        stat_regline_equation(aes(group = 1), 
+                              label.x.npc = "left", 
+                              label.y.npc = 0.95, # 稍微偏下一点
+                              size = 4.5, fontface = "bold") +
+        
+        # 8. 细节修饰
+        scale_fill_manual(values = c("#db6968", "#4d97cd", "#f8984e", "#459943")) +
+        # 关键：扩展 Y 轴顶部空间 (30%)，防止 T 检验连线被遮挡
+        scale_y_continuous(expand = expansion(mult = c(0.1, 0.5))) + 
+        labs(x = "Race Group", y = cont_var) +
+        mytheme
+      
+      output_path <- folder_name
+      # D. 保存
+      safe_name <- gsub("[[:punct:]]| ", "_", cont_var)
+      ggsave(filename = file.path(output_path, paste0("TTestTrend_", safe_name, ".png")),
+             plot = p, width = 8, height = 8, dpi = 300)
+      
+    }, error = function(e) {
+      cat("  ❌ ", cont_var, " 出错: ", e$message, "\n")
+    })
+  }
+  
+  cat("\n✅ 所有 T 检验趋势图已导出至:", output_path, "\n")
+}
+ 
+# 输出有显著性的表
+{
+  library(dplyr)
+  library(tidyr)
+  
+  # --- 1. 设定阈值 ---
+  p_threshold <- 0.05
+  r_threshold <- 0.3  # 仅针对连续变量相关性
+  
+  cont_results <- list()
+  cat_results <- list()
+  
+  # --- 2. 连续变量 vs 连续变量 (保持 cor.test，因为 t.test 不适用) ---
+  cat("正在计算连续变量相关性 (Pearson)...\n")
+  cont_idx <- 1
+  for (i in 1:(length(covname) - 1)) {
+    for (j in (i + 1):length(covname)) {
+      var1 <- covname[i]
+      var2 <- covname[j]
+      
+      tmp_data <- cov %>% select(all_of(c(var1, var2))) %>% na.omit()
+      
+      if (nrow(tmp_data) > 10) {
+        try({
+          test <- cor.test(tmp_data[[1]], tmp_data[[2]], method = "pearson")
+          if (test$p.value < p_threshold && abs(test$estimate) >= r_threshold) {
+            cont_results[[cont_idx]] <- data.frame(
+              Variable_A = var1,
+              Variable_B = var2,
+              R_Value = round(test$estimate, 4),
+              P_Value = test$p.value,
+              Method = "Pearson Correlation"
+            )
+            cont_idx <- cont_idx + 1
+          }
+        }, silent = TRUE)
+      }
+    }
+  }
+  
+  # --- 3. 分类变量 vs 连续变量 (使用 t.test) ---
+  cat("正在使用 t.test 计算分类与连续变量相关性...\n")
+  cat_idx <- 1
+  for (i in 1:length(catcovname)) {
+    for (j in 1:length(covname)) {
+      cat_var <- catcovname[i]
+      cont_var <- covname[j]
+      
+      # 准备数据
+      tmp_data <- cov %>% select(all_of(c(cat_var, cont_var))) %>% na.omit()
+      
+      # 检查分类变量的水平数量
+      levels_count <- length(unique(tmp_data[[cat_var]]))
+      
+      if (nrow(tmp_data) > 10) {
+        if (levels_count == 2) {
+          # 仅当分类变量恰好有两组时（如性别），适用 t.test
+          try({
+            form <- as.formula(paste0("`", cont_var, "` ~ `", cat_var, "`"))
+            t_res <- t.test(form, data = tmp_data)
+            
+            if (t_res$p.value < p_threshold) {
+              cat_results[[cat_idx]] <- data.frame(
+                Categorical_Var = cat_var,
+                Continuous_Var = cont_var,
+                P_Value = t_res$p.value,
+                Method = "t.test",
+                Note = "Groups: 2"
+              )
+              cat_idx <- cat_idx + 1
+            }
+          }, silent = TRUE)
+        } else if (levels_count > 2) {
+          # 如果超过两组（如 Race），t.test 不适用
+          # 此处仅记录，不进行 t.test 运算以防报错
+          # message(paste("跳过", cat_var, ": 组数 > 2，不适用 t.test"))
+        }
+      }
+    }
+  }
+  
+  # --- 4. 汇总并导出 ---
+  
+  # 转化为数据框
+  df_continuous_corr <- bind_rows(cont_results)
+  df_categorical_ttest <- bind_rows(cat_results)
+  
+  # 排序
+  if(nrow(df_continuous_corr) > 0) {
+    df_continuous_corr <- df_continuous_corr %>% arrange(P_Value)
+  }
+  if(nrow(df_categorical_ttest) > 0) {
+    df_categorical_ttest <- df_categorical_ttest %>% arrange(P_Value)
+  }
+  
+  # 打印反馈
+  print("--- 连续变量相关性 (P < 0.05) ---")
+  print(head(df_continuous_corr))
+  
+  print("--- 分类变量 t.test 显著差异 (P < 0.05) ---")
+  print(head(df_categorical_ttest))
+  
+  # 保存
+  write.csv(df_continuous_corr, "Corr_Continuous_Pearson.csv", row.names = FALSE)
+  write.csv(df_categorical_ttest, "Corr_Categorical_TTest.csv", row.names = FALSE)
+  
+  cat("\n✅ 分析完成！已生成：\n 1. Corr_Continuous_Pearson.csv\n 2. Corr_Categorical_TTest.csv\n")
+}
+# 输出有显著性的图
+# 输出有显著性的图 (连续变量 Pearson / 性别 t.test)
+{
+  library(ggplot2)
+  library(dplyr)
+  library(ggpubr) # 用于方便地添加显著性标注
+  
+  # --- 设定阈值 ---
+  p_threshold <- 0.05      # 显著性水平
+  r_threshold <- 0.3       # 相关系数绝对值阈值
+ 
+  folder_name <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\correlation\\548第一次住icu的病程记录\\基线值\\有显著相关性"
+  # 确保输出目录存在
+  if(!dir.exists(folder_name)) dir.create(folder_name, recursive = TRUE)
+  setwd(folder_name)
+  
+  # 1. 连续协变量之间：基于 P 值和 R 值的筛选 (Pearson)
+  cat("开始分析连续变量相关性...\n")
+  for (c in 1:(length(covname) - 1)) {
+    for (e in (c + 1):length(covname)) {
+      
+      # 提取数据并剔除 NA
+      test_data <- cov %>% select(all_of(c(covname[c], covname[e]))) %>% na.omit()
+      
+      if(nrow(test_data) < 5) next
+      
+      tryCatch({
+        ctest <- cor.test(test_data[[1]], test_data[[2]], method = "pearson")
+        r_val <- ctest$estimate
+        p_val <- ctest$p.value
+        
+        # 阈值判定
+        if (p_val < p_threshold && abs(r_val) >= r_threshold) {
+          
+          p3 <- ggplot(data = cov, mapping = aes(x = .data[[covname[c]]], y = .data[[covname[e]]])) +
+            geom_point(color = "#80B1D3", alpha = 0.8, size = 1.5) +
+            ggpubr::stat_cor(method = "pearson",color="black",digits = 3)+ #添加相关性系数 根据画图需要选择是否保留
+            geom_smooth(color = "#FB8072", method = "lm", size = 0.9) +
+            labs(
+                 # title = paste0("Pearson R=", round(r_val, 3), ", P=", format.pval(p_val, digits = 3)),
+                 x = covname[c], y = covname[e]) +
+            theme_bw() + 
+            theme(panel.border = element_rect(colour = "black", fill=NA, linewidth = 1.2),
+                  axis.title = element_text(size = 12, face = "bold"),
+                  axis.text = element_text(size = 10, face = "bold", color = "black"))
+          
+          safe_name_c <- gsub("[[:punct:]]| ", "_", covname[c])
+          safe_name_e <- gsub("[[:punct:]]| ", "_", covname[e])
+          
+          setwd(folder_name)
+          png(filename = paste("SIG_CONT", safe_name_c, safe_name_e, "corr.png", sep = "_"),
+              width = 1000, height = 1000, res = 200)
+          print(p3)
+          dev.off()
+          cat("  [已保存] 连续相关:", covname[c], "vs", covname[e], "\n")
+        }
+      }, error = function(e) { message("跳过: ", covname[c], " ", covname[e]) })
+    }
+  }
+  
+  # 2. 性别 (Gender) vs 连续协变量：基于 t.test P 值的筛选
+  cat("\n开始分析性别差异 (t.test)...\n")
+  # 目标变量固定为 gender
+  target_cat <- "gender" 
+  
+  for (k in 1:length(covname)) {
+    cont_var <- covname[k]
+    
+    # 提取数据并剔除 NA
+    test_data <- cov %>% select(all_of(c(target_cat, cont_var))) %>% na.omit()
+    
+    # 确保两组都有数据且样本量足够
+    if(length(unique(test_data[[target_cat]])) < 2 | nrow(test_data) < 10) next
+    
+    tryCatch({
+      # 执行 t 检验
+      t_res <- t.test(as.formula(paste0("`", cont_var, "` ~ ", target_cat)), data = test_data)
+      p_val <- t_res$p.value
+      
+      # 阈值判定
+      if (!is.na(p_val) && p_val < p_threshold) {
+        
+        p4 <- ggplot(data = test_data, aes(x = .data[[target_cat]], y = .data[[cont_var]])) +
+          geom_boxplot(width = 0.5, outlier.shape = NA, fill = "white", color = "black") +
+          # 添加抖动点增加可视化信息
+          geom_jitter(aes(fill = gender), pch = 21, size = 2, width = 0.2, alpha = 0.7) +
+          ggpubr::stat_compare_means(method = "t.test",aes(label=paste0("p=",..p.format..)))+ #添加显著性 按需要删减
+          # 添加显著性标记
+          # stat_compare_means(method = "t.test", label = "p.signif", label.x = 1.5) +
+          labs(
+            # title = paste0("t-test P=", format.pval(p_val, digits = 3)),
+            #    subtitle = paste("Comparison of", cont_var, "by Gender"),
+               x = "Gender", y = cont_var) +
+          theme_bw() +
+          scale_fill_manual(values = c("F" = "#FB8072", "M" = "#80B1D3")) + # 建议配色
+          theme(panel.border = element_rect(colour = "black", fill=NA, linewidth = 1.2),
+                axis.title = element_text(size = 12, face = "bold"),
+                axis.text = element_text(size = 10, face = "bold", color = "black"),
+                legend.position = "none")
+        
+        safe_name_k <- gsub("[[:punct:]]| ", "_", cont_var)
+        
+        setwd(folder_name)
+        png(filename = paste("SIG_GENDER", safe_name_k, "ttest.png", sep = "_"),
+            width = 1000, height = 1000, res = 200)
+        print(p4)
+        dev.off()
+        cat("  [已保存] 性别显著差异:", cont_var, "\n")
+      }
+    }, error = function(e) { message("跳过性别分析: ", cont_var) })
+  }
+}
+unique(test_data$gender)
 # 7.实验室指标箱型图 # ---------------------------------------------------------
 # 住院天数大于2小于40的患者 #---------------------------------------------------
 {

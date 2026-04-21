@@ -75,17 +75,6 @@
   
 }
 
-# {
-# 
-#   library(usethis)
-#   git_sitrep()
-#   
-#   usethis::create_github_token()
-#   gitcreds::gitcreds_set()
-#   
-#   usethis::create_github_token()
-#   gitcreds::gitcreds_set()
-# }
 ### 2.数据整理 ####-------------------------------------------------------------
 setwd(Output_derived_data)
 df_lab_log <- readRDS("mimic4_Sepsis住院天数大于2小于40的患者脓毒症相关指标log.rds")
@@ -198,7 +187,7 @@ df_chartevents2 <- df_chartevents1 %>% filter(hadm_id %in% common_ids) %>%
 
 setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered") 
 saveRDS(df_chartevents2,"mimic4_sepsis_heart_filtered_床边监护.rds")
-unique(df_chartevents3$label)
+ 
 
 setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered") 
 df_input1 <- readRDS("mimic4_sepsis_heart_filtered_用药信息.rds") 
@@ -376,88 +365,88 @@ unique(df_shock$long_title)
 # [10] "Postprocedural cardiogenic shock, initial encounter"
 
 # 确定休克开始时间#-------------------------------------------------------------
-{
-  setwd(Input_derived_data)
-  sofa_cohort_master <- read.xlsx("sofa_cohort_master.xlsx")
-  df_filter_input <- df_input2 %>% filter(hadm_id %in% df_diagnose3$hadm_id)
-  df_filter_chartevent <- df_chartevents3 %>% filter(hadm_id %in% df_diagnose3$hadm_id)
-  df_filter_lab <- final_df4 %>% filter(hadm_id  %in% df_diagnose3$hadm_id)
-  gc()
-  df_s_input <- df_filter_input %>% filter(hadm_id %in% df_shock_only$hadm_id)
-  df_s_chartevent <- df_filter_chartevent %>% filter(hadm_id %in% df_shock_only$hadm_id)
-  length(unique(df_s_chartevent$hadm_id))
-  df_s_lab <- df_filter_lab %>% filter(hadm_id %in% df_shock_only$hadm_id)
-  
-  # 定义液体 ItemID (晶体液/胶体液)
-  fluid_itemids <- c(225158, 225828, 225943, 225159, 220864, 220862, 225161, 225823, 225825)
-  
-  df_fluid_600_time <- df_s_input %>%
-    filter(itemid %in% fluid_itemids) %>%
-    arrange(stay_id, starttime) %>%
-    group_by(stay_id) %>%
-    # 计算每个 stay_id 的累积入量
-    mutate(cum_amount = cumsum(amount)) %>%
-    # 找出第一次超过 600 mL 的那行记录
-    filter(cum_amount >= 600) %>%
-    summarise(fluid_600_time = min(endtime, na.rm = TRUE)) %>%
-    ungroup()
-  
-  vasso_itemids <- c(221906, 222315, 221662, 221289, 221749)
-  # 1. 221906 —— 去甲肾上腺素 (Norepinephrine)
-  # 2. 222315 —— 血管加压素 (Vasopressin)
-  # 3. 221662 —— 多巴胺 (Dopamine)
-  # 4. 221289 —— 肾上腺素 (Epinephrine)
-  # 5. 221749 —— 去氧肾上腺素 / 新福林 (Phenylephrine)
-  df_vaso_start_time <- df_s_input %>%
-    filter(itemid %in% vasso_itemids) %>%
-    group_by(stay_id) %>%
-    summarise(vaso_start_time = min(starttime, na.rm = TRUE)) %>%
-    ungroup()
-  
-  df_lactate_2_time <- df_s_lab_with_stay %>%
-    filter(grepl("Lactate", label, ignore.case = TRUE) & valuenum >= 2) %>%
-    group_by(stay_id) %>%
-    summarise(lactate_2_time = min(charttime, na.rm = TRUE)) %>%
-    ungroup()
-  
-  # 1. 确保 df_shock 拥有 stay_id
-  # 我们从之前的 sofa 队列中提取 ID 对应关系
-  df_shock_with_id <- df_shock %>%
-    # 必须关联，因为后续的 join 都依赖 stay_id
-    inner_join(
-      sofa_cohort_master %>% select(subject_id, hadm_id, stay_id) %>% distinct(),
-      by = c("subject_id", "hadm_id")
-    )
-  
-  # 2. 现在重新执行合并逻辑
-  df_final_onset <- df_shock_with_id %>%
-    # 此时可以 select stay_id 了
-    select(subject_id, hadm_id, stay_id) %>%
-    
-    # 关联三个关键时间点
-    left_join(df_fluid_600_time, by = "stay_id") %>%
-    left_join(df_vaso_start_time, by = "stay_id") %>%
-    left_join(df_lactate_2_time, by = "stay_id") %>%
-    
-    # 3. 过滤出三个条件都满足的人（严格遵循 Sepsis-3 诊断标准）
-    filter(!is.na(fluid_600_time) & !is.na(vaso_start_time) & !is.na(lactate_2_time)) %>%
-    
-    # 4. 计算发生时刻
-    mutate(
-      # shock_onset_time 定义为：补液够了、药上了、乳酸高了，这三者最后达成的那一刻
-      shock_onset_time = pmax(fluid_600_time, vaso_start_time, lactate_2_time, na.rm = TRUE)
-    )
-  
-  # 打印最终确定的休克人数
-  cat("--- 最终分析报告 ---\n")
-  cat("原始休克诊断人数:", nrow(df_shock), "\n")
-  # 原始休克诊断人数: 764 
-  cat("符合[补液+升压药+高乳酸]严格判定的人数:", nrow(df_final_onset), "\n")
-  # 符合[补液+升压药+高乳酸]严格判定的人数: 453 
-  
-  length(unique(df_final_onset$hadm_id))
-  # [1] 371
-}
+# {
+#   setwd(Input_derived_data)
+#   sofa_cohort_master <- read.xlsx("sofa_cohort_master.xlsx")
+#   df_filter_input <- df_input2 %>% filter(hadm_id %in% df_diagnose3$hadm_id)
+#   df_filter_chartevent <- df_chartevents3 %>% filter(hadm_id %in% df_diagnose3$hadm_id)
+#   df_filter_lab <- final_df4 %>% filter(hadm_id  %in% df_diagnose3$hadm_id)
+#   gc()
+#   df_s_input <- df_filter_input %>% filter(hadm_id %in% df_shock_only$hadm_id)
+#   df_s_chartevent <- df_filter_chartevent %>% filter(hadm_id %in% df_shock_only$hadm_id)
+#   length(unique(df_s_chartevent$hadm_id))
+#   df_s_lab <- df_filter_lab %>% filter(hadm_id %in% df_shock_only$hadm_id)
+#   
+#   # 定义液体 ItemID (晶体液/胶体液)
+#   fluid_itemids <- c(225158, 225828, 225943, 225159, 220864, 220862, 225161, 225823, 225825)
+#   
+#   df_fluid_600_time <- df_s_input %>%
+#     filter(itemid %in% fluid_itemids) %>%
+#     arrange(stay_id, starttime) %>%
+#     group_by(stay_id) %>%
+#     # 计算每个 stay_id 的累积入量
+#     mutate(cum_amount = cumsum(amount)) %>%
+#     # 找出第一次超过 600 mL 的那行记录
+#     filter(cum_amount >= 600) %>%
+#     summarise(fluid_600_time = min(endtime, na.rm = TRUE)) %>%
+#     ungroup()
+#   
+#   vasso_itemids <- c(221906, 222315, 221662, 221289, 221749)
+#   # 1. 221906 —— 去甲肾上腺素 (Norepinephrine)
+#   # 2. 222315 —— 血管加压素 (Vasopressin)
+#   # 3. 221662 —— 多巴胺 (Dopamine)
+#   # 4. 221289 —— 肾上腺素 (Epinephrine)
+#   # 5. 221749 —— 去氧肾上腺素 / 新福林 (Phenylephrine)
+#   df_vaso_start_time <- df_s_input %>%
+#     filter(itemid %in% vasso_itemids) %>%
+#     group_by(stay_id) %>%
+#     summarise(vaso_start_time = min(starttime, na.rm = TRUE)) %>%
+#     ungroup()
+#   
+#   df_lactate_2_time <- df_s_lab_with_stay %>%
+#     filter(grepl("Lactate", label, ignore.case = TRUE) & valuenum >= 2) %>%
+#     group_by(stay_id) %>%
+#     summarise(lactate_2_time = min(charttime, na.rm = TRUE)) %>%
+#     ungroup()
+#   
+#   # 1. 确保 df_shock 拥有 stay_id
+#   # 我们从之前的 sofa 队列中提取 ID 对应关系
+#   df_shock_with_id <- df_shock %>%
+#     # 必须关联，因为后续的 join 都依赖 stay_id
+#     inner_join(
+#       sofa_cohort_master %>% select(subject_id, hadm_id, stay_id) %>% distinct(),
+#       by = c("subject_id", "hadm_id")
+#     )
+#   
+#   # 2. 现在重新执行合并逻辑
+#   df_final_onset <- df_shock_with_id %>%
+#     # 此时可以 select stay_id 了
+#     select(subject_id, hadm_id, stay_id) %>%
+#     
+#     # 关联三个关键时间点
+#     left_join(df_fluid_600_time, by = "stay_id") %>%
+#     left_join(df_vaso_start_time, by = "stay_id") %>%
+#     left_join(df_lactate_2_time, by = "stay_id") %>%
+#     
+#     # 3. 过滤出三个条件都满足的人（严格遵循 Sepsis-3 诊断标准）
+#     filter(!is.na(fluid_600_time) & !is.na(vaso_start_time) & !is.na(lactate_2_time)) %>%
+#     
+#     # 4. 计算发生时刻
+#     mutate(
+#       # shock_onset_time 定义为：补液够了、药上了、乳酸高了，这三者最后达成的那一刻
+#       shock_onset_time = pmax(fluid_600_time, vaso_start_time, lactate_2_time, na.rm = TRUE)
+#     )
+#   
+#   # 打印最终确定的休克人数
+#   cat("--- 最终分析报告 ---\n")
+#   cat("原始休克诊断人数:", nrow(df_shock), "\n")
+#   # 原始休克诊断人数: 764 
+#   cat("符合[补液+升压药+高乳酸]严格判定的人数:", nrow(df_final_onset), "\n")
+#   # 符合[补液+升压药+高乳酸]严格判定的人数: 453 
+#   
+#   length(unique(df_final_onset$hadm_id))
+#   # [1] 371
+# }
 
 
 # 确定cs开始时间#-------------------------------------------------------------
@@ -984,7 +973,8 @@ length(unique(all_data_rel$hadm_id[all_data_rel$Cardiogenic_shock == 1]))
 unique(all_data_rel$label)
 
 setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered")
-write.xlsx(all_data_rel,"lab_sepsis_seqnum1_filtered.xlsx")
+write.csv(all_data_rel,"lab_sepsis_seqnum1_filtered.csv")
+saveRDS(all_data_rel,"lab_sepsis_seqnum1_filtered.rds")
 # 判断icu结局 #------------------------------------------------------------
 # 判断icu结局
 {
@@ -1143,11 +1133,11 @@ write.xlsx(all_data_rel,"lab_sepsis_seqnum1_filtered.xlsx")
 # 输出首次icu临床终点
 setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered")
 write.xlsx(df_final_paths,"lab_sepsis_seqnum1_finalpath.xlsx")
-
+saveRDS(df_final_paths,"lab_sepsis_seqnum1_finalpath.rds")
 # 二、住院全程数据检视 #-------------------------------------------------------- 
 # 1.人口统计学数据和协变量分析-----------------------------------------------
 setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered")
-all_data_rel <- read.xlsx("lab_sepsis_seqnum1_filtered.xlsx")
+all_data_rel <- readRDS("lab_sepsis_seqnum1_filtered.rds")
 
 length(unique(all_data_rel$hadm_id))
 # [1] 549
@@ -2690,13 +2680,17 @@ message("所有休克后对比图绘制完毕。")
 # 三、第一次进入icu数据检视 #----------------------------------------------------------------
 # 1. 提取首诊 ICU 期间的 labevents 记录
 {
+  setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered")
+  df_final_paths <- readRDS("lab_sepsis_seqnum1_finalpath.rds")
+  all_data_rel <- readRDS("lab_sepsis_seqnum1_filtered.rds") 
+  
   df_final_paths <- df_final_paths %>% rename(first_intime = intime, first_outtime = outtime)
   colnames(df_final_paths)
   colnames(all_data_rel)
   df_first_icu_course <- all_data_rel %>%
     # 先确保实验室数据的 ID 和时间格式正确
-    mutate(across(c(subject_id, hadm_id), as.numeric),
-           charttime = as.POSIXct(charttime)) %>%
+    mutate(across(c(subject_id, hadm_id), as.numeric) ,charttime = as.POSIXct(charttime)
+           ) %>%
     
     # 关联第一步确定的“首诊窗口” (只根据 subject_id 关联)
     inner_join(df_final_paths %>% select(hadm_id, first_intime, first_outtime, is_shock_onset_in_this_icu,this_icu_outcome,endpoint_time,endpoint_state), 
@@ -4522,6 +4516,107 @@ label_groups <- list(
   "电解质与矿物质指标"     = target_labelx5,
   "炎症、代谢及其他指标"   = target_labelx6
 )
+base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_PreShock"
+format_p <- function(p) {
+  if (is.na(p)) return("P = N/A")
+  if (p < 0.001) return("P < 0.001")
+  return(paste0("P = ", round(p, 3)))
+}
+for (group_name in names(label_groups)) {
+  
+  output_dir <- file.path(base_path, group_name)
+  if (!dir.exists(output_dir)) { dir.create(output_dir, recursive = TRUE) }
+  
+  target_list <- label_groups[[group_name]]
+  
+  for (target_biomarker in target_list) {
+    
+    message("正在绘制休克前对比图: ", target_biomarker)
+    
+    # --- 核心逻辑：剔除休克后的测量点 ---
+    plot_df <- df_lab_log %>%
+      filter(label == target_biomarker & !is.na(valuenum)) %>%
+      filter(
+        # 条件1：如果是休克组，只取入院后、发病前的点
+        (shock == 1 & charttime_rel_icu >= 0 & charttime_rel_icu < shock_onset_rel_icu) |
+          # 条件2：如果是非休克组，只取入院后的点
+          (shock == 0 & charttime_rel_icu >= 0)
+      ) %>% 
+      # # 限制观察时间范围，比如入院后前 7 天（防止长住院病人的尾部噪音）
+      # filter(charttime_rel_icu <= 13) %>%
+      mutate(Group = factor(ifelse(shock == 1, "Future Shock", "Non-Shock"),
+                            levels = c("Non-Shock", "Future Shock")))
+    
+    # 健壮性检查
+    if (nrow(plot_df) < 10 | length(unique(plot_df$shock)) < 2) {
+      message("跳过 ", target_biomarker, "：有效对比数据太少")
+      next
+    }
+    
+    # 线性模型显著性：Group 对数值的影响
+    try({
+      model_linear <- lmer(valuenum ~ Group + charttime_rel_icu + (1 | subject_id), data = plot_df)
+      
+      p_linear <- summary(model_linear)$coefficients["GroupFuture Shock", "Pr(>|t|)"]
+    }, silent = TRUE)
+    
+    # 对数模型显著性
+    try({
+      model_log <- lmer(log10(valuenum + 0.001) ~ Group + charttime_rel_icu + (1 | subject_id), data = plot_df)
+      p_log_val <- summary(model_log)$coefficients["GroupFuture Shock", "Pr(>|t|)"]
+    }, silent = TRUE)
+    
+    # 获取单位
+    unit <- plot_df$valueuom[1]
+    if (is.na(unit) || unit == "") unit <- "Value"
+    
+    # --- 2. 线性坐标图 (仅含休克前点) ---
+    p_linear <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
+      geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+      geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+      scale_color_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+      scale_fill_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+      labs(
+        x = "Days from Admission",
+        y = paste0(target_biomarker, " (", unit, ")"),
+        subtitle = paste0("Outcome Difference: ", format_p(p_linear))
+      ) +
+      theme_cor + ggtitle("Linear Scale (Pre-Shock Only)")
+    
+    # --- 3. 对数坐标图 (仅含休克前点) ---
+    p_log <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
+      geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+      geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+      scale_y_log10() +
+      scale_color_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+      scale_fill_manual(values = c("Future Shock" = "#E41A1C", "Non-Shock" = "#377EB8")) +
+      labs(x = "Days from Admission", y = paste0("Log10[ ",target_biomarker, " (", unit, ") ]"),
+           subtitle = paste0("Outcome Difference: ", format_p(p_log_val))
+      ) +
+      theme_cor + ggtitle("Log10 Scale (Pre-Shock Only)")
+    
+    # --- 4. 合并与保存 ---
+    combined_plot <- (p_linear | p_log) + 
+      plot_layout(guides = 'collect') & 
+      theme(legend.position = "bottom")
+    
+    safe_name <- gsub("[^[:alnum:]]", "_", target_biomarker)
+    file_path <- file.path(output_dir, paste0(safe_name, "_PreShock_Comparison.png"))
+    ggsave(file_path, plot = combined_plot, width = 12, height = 6, dpi = 300)
+  }
+}
+
+message("所有休克前对比图绘制完毕。")
+
+# 休克发生前两组患者的实验室指标对比13days #------------------------------------------
+label_groups <- list(
+  "心肌损伤与心脏功能指标" = target_labelx1,
+  "组织灌注与酸碱平衡指标" = target_labelx2,
+  "肝肾器官功能指标"       = target_labelx3,
+  "血液学与凝血功能指标"   = target_labelx4,
+  "电解质与矿物质指标"     = target_labelx5,
+  "炎症、代谢及其他指标"   = target_labelx6
+)
 base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_PreShock_13days"
 format_p <- function(p) {
   if (is.na(p)) return("P = N/A")
@@ -4911,6 +5006,104 @@ message("所有休克前对比图绘制完毕。")
     }
   }
 }
+# 非休克患者死亡存活组的实验室指标对比 #------------------------------------------
+{
+  # 1. 辅助函数：格式化P值
+  format_p <- function(p) {
+    if (is.null(p) || is.na(p)) return("N/A")
+    if (p < 0.001) return("< 0.001")
+    return(as.character(round(p, 3)))
+  }
+  
+  label_groups <- list(
+    "心肌损伤与心脏功能指标" = target_labelx1,
+    "组织灌注与酸碱平衡指标" = target_labelx2,
+    "肝肾器官功能指标"       = target_labelx3,
+    "血液学与凝血功能指标"   = target_labelx4,
+    "电解质与矿物质指标"     = target_labelx5,
+    "炎症、代谢及其他指标"   = target_labelx6
+  )
+  
+  # 设置输出路径
+  base_path <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\CT_curve\\ICU_Biomarker_Plots_noShock_survival_death"
+
+  for (group_name in names(label_groups)) {
+    output_dir <- file.path(base_path, group_name)
+    if (!dir.exists(output_dir)) { dir.create(output_dir, recursive = TRUE) }
+    
+    target_list <- label_groups[[group_name]]
+    
+    for (target_biomarker in target_list) {
+      message("正在处理: ", target_biomarker)
+      
+      # --- 2. 数据准备 ---
+      plot_df <- df_lab_log %>%
+        filter(label == target_biomarker & !is.na(valuenum)) %>%
+        filter(shock == 0) %>%                      # 仅保留no休克患者  
+        # 分组逻辑修改：4为死亡，3为存活
+        mutate(Group = factor(ifelse(endpoint_state == 4, "Deceased", "Survivor"),
+                              levels = c("Survivor", "Deceased")))
+      
+      # 健壮性检查
+      if (nrow(plot_df) < 20 || length(unique(plot_df$Group)) < 2) {
+        message("跳过 ", target_biomarker, "：数据不足以对比存活与死亡")
+        next
+      }
+      
+      # --- 3. 统计建模 ---
+      p_linear_val <- "N/A"
+      p_log_val <- "N/A"
+      
+      # 线性混合模型：检验两组之间是否存在显著性差异
+      try({
+        model_linear <- lmer(valuenum ~ Group * charttime_rel_icu + (1 | subject_id), data = plot_df)
+        coef_summary <- summary(model_linear)$coefficients
+        # 提取 GroupDeceased 的 P 值
+        p_linear_val <- format_p(coef_summary["GroupDeceased", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # 对数混合模型
+      try({
+        model_log <- lmer(log10(valuenum + 0.001) ~ Group * charttime_rel_icu + (1 | subject_id), data = plot_df)
+        coef_log_summary <- summary(model_log)$coefficients
+        p_log_val <- format_p(coef_log_summary["GroupDeceased", "Pr(>|t|)"])
+      }, silent = TRUE)
+      
+      # --- 4. 绘图 ---
+      # 存活组 Survivor(3) 用绿色，死亡组 Deceased(4) 用红色
+      color_values <- c("Deceased" = "#E41A1C", "Survivor" = "#377EB8")
+      
+      p_linear_plot <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+        geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+        scale_color_manual(values = color_values) +
+        scale_fill_manual(values = color_values) +
+        labs(x = "Time (days)", y = target_biomarker, 
+             title = paste0("Linear (Group P: ", p_linear_val, ")")) +
+        theme_cor
+      
+      p_log_plot <- ggplot(plot_df, aes(x = charttime_rel_icu, y = valuenum, color = Group, fill = Group)) +
+        geom_point(alpha = 0.2, size = 0.8, stroke = 0) + 
+        geom_smooth(method = "loess", size = 1, alpha = 0.2) + 
+        scale_y_log10() +
+        scale_color_manual(values = color_values) +
+        scale_fill_manual(values = color_values) +
+        labs(x = "Time (days)", y = paste0("Log10 ", target_biomarker),
+             title = paste0("Log-scale (Group P: ", p_log_val, ")")) +
+        theme_cor
+      
+      # 合并保存
+      combined_plot <- (p_linear_plot | p_log_plot) + 
+        plot_layout(guides = 'collect') & 
+        theme(legend.position = "bottom")
+      
+      safe_name <- gsub("[^[:alnum:]]", "_", target_biomarker)
+      ggsave(file.path(output_dir, paste0(safe_name, "_noShock_Survivor_vs_Death.png")), 
+             combined_plot, width = 12, height = 6, dpi = 300)
+    }
+  }
+}
+
 # 4. 床边监护ct图 #-------------------------------------------------------------
 # 对齐休克为0时刻 心源性休克组 vs 非心源性休克床边监护指标ct图#---------------------------------
 # 1. 提取 hadm_id 与 Cardiogenic_shock 的对应关系
@@ -5351,7 +5544,7 @@ for (c in 1:length(target_labels)) {
       # 3. 【绘图与保存】
       p3 <- ggplot(data = lab_wider, mapping = aes(x = .data[[var_x]], y = .data[[var_y]])) +
         geom_point(color = "blue", alpha = 0.3, size = 1.5) +
-        geom_smooth(color = "red", method = "lm", size = 0.9, formula = y ~ x) +
+        geom_smooth(color = "red", method = "loess", size = 0.9, formula = y ~ x) +
         stat_cor(method = "pearson", color = "black", digits = 3) + 
         theme(panel.grid.major = element_blank(),
               panel.grid.minor = element_blank(),
@@ -5783,9 +5976,9 @@ for (c in 1:length(target_labels)) {
   }
 }
 
-# 7.实验室指标基线值_人口学信息相关性分析 #-------------------------------
+# 7.实验室指标基线值_人口学信息_相关性分析 #-------------------------------
+# 第一次icu病程数据 #---------------------------------------------------
 {
-  # 第一次icu病程数据 #---------------------------------------------------
   setwd(file.path(Output_derived_data,"data_filtered"))
   df_lab_log <- readRDS("icu_filtered_mimic4_Sepsislog.rds")
   folder_name <- "D:\\Lab_project\\2026work\\sepsis\\PLOT\\sepsis\\correlation\\548第一次住icu的病程记录\\基线值"
@@ -5842,7 +6035,7 @@ for (c in 1:length(target_labels)) {
     for (e in d:length(covname)) {
       p3 <- ggplot(data=cov, mapping = aes(x=get((covname[c])),y =get((covname[e]))))+
         geom_point(color="blue",alpha=0.3,size=1.5)+
-        geom_smooth(color="red",method = "lm",size=0.9)+
+        geom_smooth(color="red",method = "loess",size=0.9)+
          ggpubr::stat_cor(method = "pearson",color="black",digits = 3)+ #添加相关性系数 根据画图需要选择是否保留
         theme(panel.grid.major = element_blank(),
               panel.grid.minor = element_blank(),
@@ -5909,7 +6102,7 @@ for (c in 1:length(target_labels)) {
   dev.off()
 }
 
-# 对race_group四个分组的相关性分析
+# 对race_group四个分组的相关性分析 ------------------------------------------------
 {
   library(ggplot2)
   library(dplyr)
@@ -6008,7 +6201,7 @@ for (c in 1:length(target_labels)) {
   cat("\n✅ 所有 T 检验趋势图已导出至:", output_path, "\n")
 }
  
-# 输出有显著性的表
+# 输出有显著性的表----------------------------------------------------------------
 {
   library(dplyr)
   library(tidyr)
@@ -6116,8 +6309,8 @@ for (c in 1:length(target_labels)) {
   
   cat("\n✅ 分析完成！已生成：\n 1. Corr_Continuous_Pearson.csv\n 2. Corr_Categorical_TTest.csv\n")
 }
-# 输出有显著性的图
-# 输出有显著性的图 (连续变量 Pearson / 性别 t.test)
+
+# 输出有显著性的图 (连续变量 Pearson / 性别 t.test)------------------------------
 {
   library(ggplot2)
   library(dplyr)
@@ -6153,7 +6346,7 @@ for (c in 1:length(target_labels)) {
           p3 <- ggplot(data = cov, mapping = aes(x = .data[[covname[c]]], y = .data[[covname[e]]])) +
             geom_point(color = "#80B1D3", alpha = 0.8, size = 1.5) +
             ggpubr::stat_cor(method = "pearson",color="black",digits = 3)+ #添加相关性系数 根据画图需要选择是否保留
-            geom_smooth(color = "#FB8072", method = "lm", size = 0.9) +
+            geom_smooth(color = "#FB8072", method = "loess", size = 0.9) +
             labs(
                  # title = paste0("Pearson R=", round(r_val, 3), ", P=", format.pval(p_val, digits = 3)),
                  x = covname[c], y = covname[e]) +
@@ -6228,7 +6421,7 @@ for (c in 1:length(target_labels)) {
     }, error = function(e) { message("跳过性别分析: ", cont_var) })
   }
 }
-unique(test_data$gender)
+
 # 7.实验室指标箱型图 # ---------------------------------------------------------
 # 住院天数大于2小于40的患者 #---------------------------------------------------
 {

@@ -51,8 +51,7 @@
     p
   }
   options(scipen = 999)  # 不使用科学计数法
-}
-{
+ 
   theme_cor <-theme(panel.grid.major = element_blank(),
                     panel.grid.minor = element_blank(),
                     panel.background = element_blank(),
@@ -81,7 +80,7 @@
   setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered")
   df_final_paths <- readRDS("lab_sepsis_seqnum1_finalpath.rds")
   all_data_rel <- readRDS("lab_sepsis_seqnum1_filtered.rds") 
-  
+
   df_final_paths <- df_final_paths %>% rename(first_intime = intime, first_outtime = outtime)
   colnames(df_final_paths)
   colnames(all_data_rel)
@@ -102,6 +101,12 @@
   cat("提取前化验记录总数: ", nrow(all_data_rel), "\n")
   cat(" 患者人数: ", n_distinct(df_first_icu_course$hadm_id), "\n")
   cat("首诊ICU内的化验记录总数: ", nrow(df_first_icu_course), "\n")
+  
+  setwd(Output_derived_data)
+  df_diagnose <- read.xlsx("mimic4_sepsis_heart_诊断.xlsx") %>% filter(hadm_id %in% df_first_icu_course$hadm_id)
+  length(unique(df_diagnose$hadm_id))
+  setwd("D:\\Lab_project\\2026work\\sepsis\\DATA\\sepsis\\derived_data\\data_filtered")
+  write.xlsx(df_diagnose,"mimic4_sepsis_seqnum1_msm_诊断.xlsx")
   
 }
 # 提取前化验记录总数:  464906 

@@ -240,6 +240,7 @@ length(unique(first_icu_lab$hadm_id))
 # [1] 548
 cov1 <- first_icu_lab[!duplicated(paste(first_icu_lab$hadm_id)),]  #提取每个ID的第一行协变量值
 colnames(cov1)
+unique(cov1$race)
 covname <- colnames(cov1[,c("outtime_rel_icu","age","endpoint_rel_icu","deathtime_rel_icu","shock_onset_rel_icu")])
 catcovname <- colnames(cov1[,c("Cardiogenic_shock","this_icu_outcome","is_shock_onset_in_this_icu","Gender","race")])   #定义需要后续分析的连续协变量和分类协变量
 colnames(cov1)

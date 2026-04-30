@@ -259,7 +259,7 @@ unique(df_diagnose1$long_title)
 
 setwd(Output_derived_data)
 write.xlsx(df_diagnose1,"mimic4_sepsis_heart_诊断.xlsx")
-write.xlsx(df_diagnose7,"mimic4_sepsis_cs_nosurgery_诊断.xlsx")
+# write.xlsx(df_diagnose7,"mimic4_sepsis_cs_nosurgery_诊断.xlsx")
 
 setwd(Output_derived_data)
 df_diagnose1 <- read.xlsx("mimic4_sepsis_heart_诊断.xlsx") 
@@ -376,10 +376,10 @@ unique(df_shock$long_title)
 #   df_s_chartevent <- df_filter_chartevent %>% filter(hadm_id %in% df_shock_only$hadm_id)
 #   length(unique(df_s_chartevent$hadm_id))
 #   df_s_lab <- df_filter_lab %>% filter(hadm_id %in% df_shock_only$hadm_id)
-#   
+# 
 #   # 定义液体 ItemID (晶体液/胶体液)
 #   fluid_itemids <- c(225158, 225828, 225943, 225159, 220864, 220862, 225161, 225823, 225825)
-#   
+# 
 #   df_fluid_600_time <- df_s_input %>%
 #     filter(itemid %in% fluid_itemids) %>%
 #     arrange(stay_id, starttime) %>%
@@ -390,7 +390,7 @@ unique(df_shock$long_title)
 #     filter(cum_amount >= 600) %>%
 #     summarise(fluid_600_time = min(endtime, na.rm = TRUE)) %>%
 #     ungroup()
-#   
+# 
 #   vasso_itemids <- c(221906, 222315, 221662, 221289, 221749)
 #   # 1. 221906 —— 去甲肾上腺素 (Norepinephrine)
 #   # 2. 222315 —— 血管加压素 (Vasopressin)
@@ -402,13 +402,13 @@ unique(df_shock$long_title)
 #     group_by(stay_id) %>%
 #     summarise(vaso_start_time = min(starttime, na.rm = TRUE)) %>%
 #     ungroup()
-#   
+# 
 #   df_lactate_2_time <- df_s_lab_with_stay %>%
 #     filter(grepl("Lactate", label, ignore.case = TRUE) & valuenum >= 2) %>%
 #     group_by(stay_id) %>%
 #     summarise(lactate_2_time = min(charttime, na.rm = TRUE)) %>%
 #     ungroup()
-#   
+# 
 #   # 1. 确保 df_shock 拥有 stay_id
 #   # 我们从之前的 sofa 队列中提取 ID 对应关系
 #   df_shock_with_id <- df_shock %>%
@@ -417,33 +417,33 @@ unique(df_shock$long_title)
 #       sofa_cohort_master %>% select(subject_id, hadm_id, stay_id) %>% distinct(),
 #       by = c("subject_id", "hadm_id")
 #     )
-#   
+# 
 #   # 2. 现在重新执行合并逻辑
 #   df_final_onset <- df_shock_with_id %>%
 #     # 此时可以 select stay_id 了
 #     select(subject_id, hadm_id, stay_id) %>%
-#     
+# 
 #     # 关联三个关键时间点
 #     left_join(df_fluid_600_time, by = "stay_id") %>%
 #     left_join(df_vaso_start_time, by = "stay_id") %>%
 #     left_join(df_lactate_2_time, by = "stay_id") %>%
-#     
+# 
 #     # 3. 过滤出三个条件都满足的人（严格遵循 Sepsis-3 诊断标准）
 #     filter(!is.na(fluid_600_time) & !is.na(vaso_start_time) & !is.na(lactate_2_time)) %>%
-#     
+# 
 #     # 4. 计算发生时刻
 #     mutate(
 #       # shock_onset_time 定义为：补液够了、药上了、乳酸高了，这三者最后达成的那一刻
 #       shock_onset_time = pmax(fluid_600_time, vaso_start_time, lactate_2_time, na.rm = TRUE)
 #     )
-#   
+# 
 #   # 打印最终确定的休克人数
 #   cat("--- 最终分析报告 ---\n")
 #   cat("原始休克诊断人数:", nrow(df_shock), "\n")
-#   # 原始休克诊断人数: 764 
+#   # 原始休克诊断人数: 764
 #   cat("符合[补液+升压药+高乳酸]严格判定的人数:", nrow(df_final_onset), "\n")
-#   # 符合[补液+升压药+高乳酸]严格判定的人数: 453 
-#   
+#   # 符合[补液+升压药+高乳酸]严格判定的人数: 453
+# 
 #   length(unique(df_final_onset$hadm_id))
 #   # [1] 371
 # }
@@ -642,7 +642,7 @@ df_s_all_lab <- df_filter_lab %>% filter(hadm_id %in% df_shock$hadm_id)
     inner_join(df_vaso_anchor, by = "stay_id") %>%
     # 定义 6 小时分析窗口：[药前6h, 药开始]
     mutate(
-      win_start = vaso_start_time - hours(12),
+      win_start = vaso_start_time - hours(24),
       win_end   = vaso_start_time
     ) %>%
     # 筛选与窗口有时间交集的行
@@ -666,7 +666,7 @@ df_s_all_lab <- df_filter_lab %>% filter(hadm_id %in% df_shock$hadm_id)
     group_by(stay_id, vaso_start_time) %>%
     summarise(total_fluid_6h = sum(amount_in_6h, na.rm = TRUE), .groups = "drop") %>%
     # 验证门槛：6 小时内补液 >= 600 mL
-    filter(total_fluid_6h >= 600)
+    filter(total_fluid_6h >= 1200)
   length(unique(df_fluid_verified$stay_id))
   #184
   
@@ -813,98 +813,97 @@ df_s_all_lab <- df_filter_lab %>% filter(hadm_id %in% df_shock$hadm_id)
 
 # 血压+乳酸+血管升压素
 {
-  {
-    library(dplyr)
-    library(lubridate)
-    
-    
-    # 0. 基础 ID 统一与清理
-    
-    clean_ids <- function(df) {
-      df %>% mutate(across(any_of(c("subject_id", "hadm_id", "stay_id")), as.numeric))
-    }
-    
-    df_shock_base <- clean_ids(df_shock_base) %>% select(-any_of("stay_id"))
-    sofa_bridge <- sofa_cohort_master %>% 
-      select(subject_id, hadm_id, stay_id, intime, outtime) %>% 
-      distinct() %>% 
-      clean_ids()
-    
-    
-    # 1. 提取锚点：首次启动血管活性药物
-    
-    vasso_itemids <- c(221906, 221662, 222315, 221289, 221749)
-    
-    df_vaso_candidates <- df_s_all_input %>%
-      filter(itemid %in% vasso_itemids) %>%
-      group_by(stay_id) %>%
-      summarise(vaso_start_time = min(starttime, na.rm = TRUE)) %>%
-      ungroup() %>%
-      clean_ids()
-    
-    # ------------------------------------------
-    # 验证条件 3：排除入 ICU 后 2 小时内即启动药物的人
-    # (为了保证有足够的休克前基线数据用于建模)
-    # ------------------------------------------
-    df_vaso_anchor <- df_vaso_candidates %>%
-      inner_join(sofa_bridge, by = "stay_id") %>%
-      mutate(hours_to_vaso = as.numeric(difftime(vaso_start_time, intime, units = "hours"))) %>%
-      # filter(hours_to_vaso >= 2) %>%
-      select(subject_id, hadm_id, stay_id, vaso_start_time, intime)
-    
-    
-    # 2. 验证条件 1：药前后 12h 内有 MAP <= 65
-    
-    df_map_verified <- df_s_all_chartevent %>%
-      filter(itemid %in% c(220052, 220181) & valuenum > 0 & valuenum <= 65) %>%
-      clean_ids() %>%
-      inner_join(df_vaso_anchor %>% select(stay_id, vaso_start_time), by = "stay_id") %>%
-      filter(abs(difftime(charttime, vaso_start_time, units = "hours")) <= 12) %>%
-      distinct(stay_id) # 只要存在即可
-    
-    
-    # 3. 验证条件 2：药前后 12h 内有 Lactate >= 2
-    
-    df_lac_verified <- df_lab_with_stay %>%
-      filter(grepl("Lactate", label, ignore.case = TRUE) & valuenum >= 2) %>%
-      clean_ids() %>%
-      inner_join(df_vaso_anchor %>% select(stay_id, vaso_start_time), by = "stay_id") %>%
-      filter(abs(difftime(charttime, vaso_start_time, units = "hours")) <= 12) %>%
-      distinct(stay_id) # 只要存在即可
-    
-    
-    # 4. 汇总最终队列与休克开始时间
-    
-    df_final_shock_cohort <- df_shock_base %>%
-      # 必须在血管活性药物的候选池中
-      inner_join(df_vaso_anchor, by = c("subject_id", "hadm_id")) %>%
-      # 必须通过 MAP 验证
-      inner_join(df_map_verified, by = "stay_id") %>%
-      # 必须通过乳酸验证
-      inner_join(df_lac_verified, by = "stay_id") %>%
-      
-      mutate(
-        # 最终定义：药物启动时刻即为休克起始时刻 (T0)
-        shock_onset_time = vaso_start_time
-      ) %>%
-      
-      # 针对同一个 hadm_id，保留最早的休克开始记录
-      group_by(hadm_id) %>%
-      slice_min(shock_onset_time, n = 1, with_ties = FALSE) %>%
-      ungroup()
-    
-    # 输出结果报告
-    cat("==========================================\n")
-    cat("      新逻辑：药物锚点+双重验证报告\n")
-    cat("==========================================\n")
-    cat("1. 初始诊断人数:              ", length(unique(df_shock_base$hadm_id)), "\n")
-    # cat("2. 排除早期用药后剩余人数:    ", nrow(df_vaso_anchor), "\n")
-    cat("3. 最终符合药+低血压+高乳酸人数: ", nrow(df_final_shock_cohort), "\n")
-    cat("------------------------------------------\n")
-    # 预览对齐后的时间
-    print(head(df_final_shock_cohort %>% select(hadm_id, stay_id, shock_onset_time)))
+  library(dplyr)
+  library(lubridate)
+  
+  
+  # 0. 基础 ID 统一与清理
+  
+  clean_ids <- function(df) {
+    df %>% mutate(across(any_of(c("subject_id", "hadm_id", "stay_id")), as.numeric))
   }
+  
+  df_shock_base <- clean_ids(df_shock_base) %>% select(-any_of("stay_id"))
+  sofa_bridge <- sofa_cohort_master %>% 
+    select(subject_id, hadm_id, stay_id, intime, outtime) %>% 
+    distinct() %>% 
+    clean_ids()
+  
+  
+  # 1. 提取锚点：首次启动血管活性药物
+  
+  vasso_itemids <- c(221906, 221662, 222315, 221289, 221749)
+  
+  df_vaso_candidates <- df_s_all_input %>%
+    filter(itemid %in% vasso_itemids) %>%
+    group_by(stay_id) %>%
+    summarise(vaso_start_time = min(starttime, na.rm = TRUE)) %>%
+    ungroup() %>%
+    clean_ids()
+  
+  # ------------------------------------------
+  # 验证条件 3：排除入 ICU 后 2 小时内即启动药物的人
+  # (为了保证有足够的休克前基线数据用于建模)
+  # ------------------------------------------
+  df_vaso_anchor <- df_vaso_candidates %>%
+    inner_join(sofa_bridge, by = "stay_id") %>%
+    mutate(hours_to_vaso = as.numeric(difftime(vaso_start_time, intime, units = "hours"))) %>%
+    # filter(hours_to_vaso >= 2) %>%
+    select(subject_id, hadm_id, stay_id, vaso_start_time, intime)
+  
+  
+  # 2. 验证条件 1：药前后 12h 内有 MAP <= 65
+  
+  df_map_verified <- df_s_all_chartevent %>%
+    filter(itemid %in% c(220052, 220181) & valuenum > 0 & valuenum <= 65) %>%
+    clean_ids() %>%
+    inner_join(df_vaso_anchor %>% select(stay_id, vaso_start_time), by = "stay_id") %>%
+    filter(abs(difftime(charttime, vaso_start_time, units = "hours")) <= 12) %>%
+    distinct(stay_id) # 只要存在即可
+  
+  
+  # 3. 验证条件 2：药前后 12h 内有 Lactate >= 2
+  
+  df_lac_verified <- df_lab_with_stay %>%
+    filter(grepl("Lactate", label, ignore.case = TRUE) & valuenum >= 2) %>%
+    clean_ids() %>%
+    inner_join(df_vaso_anchor %>% select(stay_id, vaso_start_time), by = "stay_id") %>%
+    filter(abs(difftime(charttime, vaso_start_time, units = "hours")) <= 12) %>%
+    distinct(stay_id) # 只要存在即可
+  
+  
+  # 4. 汇总最终队列与休克开始时间
+  
+  df_final_shock_cohort <- df_shock_base %>%
+    # 必须在血管活性药物的候选池中
+    inner_join(df_vaso_anchor, by = c("subject_id", "hadm_id")) %>%
+    # 必须通过 MAP 验证
+    inner_join(df_map_verified, by = "stay_id") %>%
+    # 必须通过乳酸验证
+    inner_join(df_lac_verified, by = "stay_id") %>%
+    
+    mutate(
+      # 最终定义：药物启动时刻即为休克起始时刻 (T0)
+      shock_onset_time = vaso_start_time
+    ) %>%
+    
+    # 针对同一个 hadm_id，保留最早的休克开始记录
+    group_by(hadm_id) %>%
+    slice_min(shock_onset_time, n = 1, with_ties = FALSE) %>%
+    ungroup()
+  
+  # 输出结果报告
+  cat("==========================================\n")
+  cat("      新逻辑：药物锚点+双重验证报告\n")
+  cat("==========================================\n")
+  cat("1. 初始诊断人数:              ", length(unique(df_shock_base$hadm_id)), "\n")
+  # cat("2. 排除早期用药后剩余人数:    ", nrow(df_vaso_anchor), "\n")
+  cat("3. 最终符合药+低血压+高乳酸人数: ", nrow(df_final_shock_cohort), "\n")
+  cat("------------------------------------------\n")
+  # 预览对齐后的时间
+  print(head(df_final_shock_cohort %>% select(hadm_id, stay_id, shock_onset_time)))
 }
+
 # 1. 初始诊断人数:               648 
 # 3. 最终符合药+低血压+高乳酸人数:  192 
 
